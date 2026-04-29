@@ -1,0 +1,284 @@
+
+	GIT - the stupid content tracker
+	GIT - 愚蠢的内容追踪器
+
+"git" can mean anything, depending on your mood.
+"git" 可以表示任何含义，取决于你的心情。
+
+ - random three-letter combination that is pronounceable, and not
+   actually used by any common UNIX command.  The fact that it is a
+   mispronounciation of "get" may or may not be relevant.
+ - 一个随机的、可发音的三字母组合，且没有
+   被任何常见 UNIX 命令占用。
+	 它碰巧是 "get" 的错误发音，这也许有关，也许无关。
+
+ - stupid. contemptible and despicable. simple. Take your pick from the
+   dictionary of slang.
+ - 愚蠢的。可鄙的。简单的。从俚语词典里随便挑一个吧。
+
+ - "global information tracker": you're in a good mood, and it actually
+   works for you. Angels sing, and a light suddenly fills the room.
+ - "全球信息追踪器"：你的心境很好，它对你恰好有用。
+   天使在歌唱，一道光芒突然充满整个房间。
+
+ - "goddamn idiotic truckload of sh*t": when it breaks
+ - "该死的蠢货一堆狗屎"：当它崩掉的时候。
+
+This is a stupid (but extremely fast) directory content manager.  It
+doesn't do a whole lot, but what it _does_ do is track directory
+contents efficiently.
+这是一个愚蠢（但极其快）的目录内容管理器。
+它做不了多少事，但它 _确实_ 能高效地追踪目录内容。
+
+There are two object abstractions: the "object database", and the
+"current directory cache".
+这里有两个对象抽象："对象数据库"，以及"当前目录缓存"。
+
+	The Object Database (SHA1_FILE_DIRECTORY)
+	对象数据库（SHA1_FILE_DIRECTORY）
+
+The object database is literally just a content-addressable collection
+of objects.  All objects are named by their content, which is
+approximated by the SHA1 hash of the object itself.  Objects may refer
+to other objects (by referencing their SHA1 hash), and so you can build
+up a hierarchy of objects.
+对象数据库(object database)实际上就是一个内容可寻址的对象集合。
+所有对象都由其内容来命名，
+具体做法是 用对象自身的 SHA1 哈希值来表示。
+对象之间可以相互引用（通过引用其他对象的 SHA1 哈希值），因此你可以构建起
+对象的层级结构。
+
+There are several kinds of objects in the content-addressable collection
+database.  They are all in deflated with zlib, and start off with a tag
+of their type, and size information about the data.  The SHA1 hash is
+always the hash of the _compressed_ object, not the original one.
+这个内容可寻址集合数据库有几种对象类型。
+它们都用 zlib 压缩（deflate），并以一个类型标签 和 数据的尺寸信息作为开头。
+SHA1 哈希值始终是 _压缩后_ 对象的哈希，而非原始数据的哈希。
+
+In particular, the consistency of an object can always be tested
+independently of the contents or the type of the object: all objects can
+be validated by verifying that (a) their hashes match the content of the
+file and (b) the object successfully inflates to a stream of bytes that
+forms a sequence of <ascii tag without space> + <space> + <ascii decimal
+size> + <byte\0> + <binary object data>.
+特别值得注意的是，对象的完整性\一致性总是可以独立于 对象的内容 或 对象类型进行检验：
+所有对象都可以通过验证以下两点来确认：(a) 其哈希值与文件内容匹配；
+(b) 对象能够成功解压为如下格式的字节流：
+<不含空格的 ASCII 标签> + <空格> + <ASCII 十进制大小> + <字节 \0> + <二进制 对象数据>。
+
+BLOB: A "blob" object is nothing but a binary blob of data, and doesn't
+refer to anything else.  There is no signature or any other verification
+of the data, so while the object is consistent (it _is_ indexed by its
+sha1 hash, so the data itself is certainly correct), it has absolutely
+no other attributes.  No name associations, no permissions.  It is
+purely a blob of data (ie normally "file contents").
+BLOB：一个 "blob" 对象 只能是 一段二进制数据，
+它不引用任何其他对象。没有任何签名或其他形式的数据校验，
+so while 这个对象是完整的\一致的（它 _确实_ 是通过它的SHA1 哈希来索引的，
+所以数据本身肯定正确），
+但它绝对没有其他属性。没有文件名关联，没有权限。
+它纯粹就是一团数据（即通常所说的"文件内容"）。
+
+TREE: The next hierarchical object type is the "tree" object.  A tree
+object is a list of permission/name/blob data, sorted by name.  In other
+words the tree object is uniquely determined by the set contents, and so
+two separate but identical trees will always share the exact same
+object.
+TREE：下一层级对象类型是 "tree" 对象。
+一个 tree对象 是一个按名称排序的 "权限/名称/blob数据" 列表。
+换句话说，tree 对象 由其所包含的集合内容 唯一确定，
+因此两个独立但内容完全相同的 tree 将始终共享完全相同的对象。
+
+Again, a "tree" object is just a pure data abstraction: it has no
+history, no signatures, no verification of validity, except that the
+contents are again protected by the hash itself.  So you can trust the
+contents of a tree, the same way you can trust the contents of a blob,
+but you don't know where those contents _came_ from.
+同样，一个 tree 对象仅仅是一个纯数据抽象：
+它 没有历史，没有签名，没有有效性校验，
+唯一保证就是其内容再次被它的哈希保护。
+因此你可以信任 tree 的内容，就像你可以信任 blob 的内容一样，
+但你不知道这些内容 _来自_ 哪里。
+
+Side note on trees: since a "tree" object is a sorted list of
+"filename+content", you can create a diff between two trees without
+actually having to unpack two trees.  Just ignore all common parts, and
+your diff will look right.  In other words, you can effectively (and
+efficiently) tell the difference between any two random trees by O(n)
+where "n" is the size of the difference, rather than the size of the
+tree.
+关于 tree 的附注1：由于 一个 tree 对象是一个按"文件名+内容" 排序的列表，
+你可以对两个 tree 做 diff 而不需要实际解包两个 tree。
+只需忽略所有共同部分，
+你的 diff 就会是正确的。换句话说，你可以高效（并快捷）地
+以O(n)的复杂度，找出任意两个 tree 之间的差异，
+其中 "n" 是差异的大小，而非整个tree 的大小。
+
+
+Side note 2 on trees: since the name of a "blob" depends entirely and
+exclusively on its contents (ie there are no names or permissions
+involved), you can see trivial renames or permission changes by noticing
+that the blob stayed the same.  However, renames with data changes need
+a smarter "diff" implementation.
+关于 tree 的附注 2：由于 "blob" 的名字 完全且唯一地 取决于其内容
+（即没有名称或权限参与其中），
+你可以通过 通过 blob 保持不变来 来发现 简单的重命名 或 权限变更。
+但是，伴随数据变化的重命名则需要更聪明的 "diff" 实现。
+
+CHANGESET: The "changeset" object is an object that introduces the
+notion of history into the picture.  In contrast to the other objects,
+it doesn't just describe the physical state of a tree, it describes how
+we got there, and why.
+CHANGESET："changeset" 对象是一个 将历史概念引入到这个情景 的对象。
+与其他对象不同，
+它不仅仅描述一个 tree 的物理状态，
+它还描述了我们是如何到达那个状态的，以及为什么。
+
+A "changeset" is defined by the tree-object that it results in, the
+parent changesets (zero, one or more) that led up to that point, and a
+comment on what happened. Again, a changeset is not trusted per se:
+the contents are well-defined and "safe" due to the cryptographically
+strong signatures at all levels, but there is no reason to believe that
+the tree is "good" or that the merge information makes sense. The
+parents do not have to actually have any relationship with the result,
+for example.
+"changeset" 由以下内容定义：它所产生的 tree 对象、
+导致这一状态的父 changeset（零个、一个或多个），
+以及关于所发生事情的注释。
+同样，changeset 本身并不被信任：
+其内容 定义明确 且"安全"，因为在各级都有密码学意义上的强签名保护，
+但没有理由相信这个 tree 是"好的"，或 合并信息 是有意义的。
+举个例子来说，父提交实际上并不一定与结果有任何关系。
+
+Note on changesets: unlike real SCM's, changesets do not contain rename
+information or file mode chane information.  All of that is implicit in
+the trees involved (the result tree, and the result trees of the
+parents), and describing that makes no sense in this idiotic file
+manager.
+关于 changeset 的附注：与真正的 SCM 不同，changeset 不包含重命名
+信息或文件模式变更信息。
+所有这些信息都隐含在所涉及的 tree 之中
+（结果 tree，以及各结果 tree的 父提交），
+而在这个蠢蛋文件管理器里，描述这些毫无意义。
+
+TRUST: The notion of "trust" is really outside the scope of "git", but
+it's worth noting a few things. First off, since everything is hashed
+with SHA1, you _can_ trust that an object is intact and has not been
+messed with by external sources. So the name of an object uniquely
+identifies a known state - just not a state that you may want to trust.
+信任：关于"信任"的概念确实超出了 "git" 的范畴，
+但是有几件事值得一说。首先，因为一切内容都通过SHA1 进行哈希，
+你 _可以_ 信任一个对象是完整且未被外部来源篡改过的。
+因此一个对象的名字唯一地标识了一个已知状态 - 只不过不一定是你愿意信任的状态。
+
+Furthermore, since the SHA1 signature of a changeset refers to the
+SHA1 signatures of the tree it is associated with and the signatures
+of the parent, a single named changeset specifies uniquely a whole
+set of history, with full contents. You can't later fake any step of
+the way once you have the name of a changeset.
+此外，由于一个 changeset 的 SHA1 签名
+引用了它所关联的tree 的 SHA1 签名以及其父提交的签名，
+只要给出一个 changeset 的名字，就唯一地指定了整套历史及其完整内容。
+一旦你有了 changeset 的名字，就无法在事后伪造历史中的任何一步。
+
+So to introduce some real trust in the system, the only thing you need
+to do is to digitally sign just _one_ special note, which includes the
+name of a top-level changeset.  Your digital signature shows others that
+you trust that changeset, and the immutability of the history of
+changesets tells others that they can trust the whole history.
+因此要想在系统中引入真正的信任，你唯一需要做的
+就是数字签名 仅仅 _一个_ 特殊记录，
+其中包含一个顶层 changeset 的名字。
+你的数字签名向他人表明你信任那个 changeset，
+而 changeset 历史的不可变性 则告诉他人，他们可以信任整段历史。
+
+In other words, you can easily validate a whole archive by just sending
+out a single email that tells the people the name (SHA1 hash) of the top
+changeset, and digitally sign that email using something like GPG/PGP.
+换句话说，你可以轻易地验证整个归档，仅仅通过
+发送一封电子邮件，告知人们顶层 changeset 的名字（SHA1 哈希值），
+并用 GPG/PGP 之类的东西对那封邮件进行数字签名。
+
+In particular, you can also have a separate archive of "trust points" or
+tags, which document your (and other peoples) trust.  You may, of
+course, archive these "certificates of trust" using "git" itself, but
+it's not something "git" does for you.
+特别是，你还可以拥有一个独立的 "信任点"或标签 归档，
+这个文档你（及他人）的信任。
+你当然可以用 "git" 自身来归档这些"信任证书"，
+但这不是 "git" 为你做的事。
+
+Another way of saying the same thing: "git" itself only handles content
+integrity, the trust has to come from outside.
+换种说法："git" 本身只处理内容完整性，信任必须来自外部。
+
+	Current Directory Cache (".dircache/index")
+	当前目录缓存（".dircache/index"）
+
+The "current directory cache" is a simple binary file, which contains an
+efficient representation of a virtual directory content at some random
+time.  It does so by a simple array that associates a set of names,
+dates, permissions and content (aka "blob") objects together.  The cache
+is always kept ordered by name, and names are unique at any point in
+time, but the cache has no long-term meaning, and can be partially
+updated at any time.
+"当前目录缓存"是一个简单的二进制文件，
+内含 某个任意时间的 虚拟目录内容的 高效表示。
+它通过一个简单的数组来实现，
+该数组将一组名称、日期、权限和内容（即 "blob"）对象关联在一起。
+缓存始终按名称排序，并且在任意时间点名称都是唯一的，
+但缓存没有长期含义，且可以在任何时候被部分更新。
+
+In particular, the "current directory cache" certainly does not need to
+be consistent with the current directory contents, but it has two very
+important attributes:
+特别地，"当前目录缓存"当然不需要与当前目录内容保持一致，
+但它有两个非常重要的属性：
+
+ (a) it can re-generate the full state it caches (not just the directory
+     structure: through the "blob" object it can regenerate the data too)
+ (a) 它可以重新生成其缓存的完整状态
+    （不仅限于目录结构：通过 "blob" 对象，它还能重新生成数据本身）
+
+     As a special case, there is a clear and unambiguous one-way mapping
+     from a current directory cache to a "tree object", which can be
+     efficiently created from just the current directory cache without
+     actually looking at any other data.  So a directory cache at any
+     one time uniquely specifies one and only one "tree" object (but
+     has additional data to make it easy to match up that tree object
+     with what has happened in the directory)
+     作为一种特殊情况，存在一个清晰且明确的、从当前目录缓存到"tree 对象"的单向映射，
+     该映射可以仅仅从当前目录缓存高效地创建，而无须实际查看任何其他数据。
+     因此任意时刻的目录缓存唯一地指定一个且仅一个 "tree" 对象
+     （但附带有额外数据，以便轻松地将该 tree 对象与目录中发生的变化对应起来）
+
+
+and
+
+ (b) it has efficient methods for finding inconsistencies between that
+     cached state ("tree object waiting to be instantiated") and the
+     current state.
+ (b) 它拥有高效的方法来找出 在 缓存状态
+    （"等待被实例化的 tree 对象"）与当前状态之间 的不一致
+
+Those are the two ONLY things that the directory cache does.  It's a
+cache, and the normal operation is to re-generate it completely from a
+known tree object, or update/compare it with a live tree that is being
+developed.  If you blow the directory cache away entirely, you haven't
+lost any information as long as you have the name of the tree that it
+described.
+这就是目录缓存所做的仅有两件事。
+它是一个缓存，常规操作是 从一个已知的 tree 对象 完整得重新生成它，
+或者用它来更新/对比一个正在开发中的活跃 tree。
+如果你把目录缓存整个删掉，只要你还有它曾经描述的tree 对象的名称，你就没有丢失任何信息。
+
+(But directory caches can also have real information in them: in
+particular, they can have the representation of an intermediate tree
+that has not yet been instantiated.  So they do have meaning and usage
+outside of caching - in one sense you can think of the current directory
+cache as being the "work in progress" towards a tree commit).
+（但目录缓存中也可以含有真实信息：
+尤其是，它们可以 拥有 尚未被实例化的中间 tree 的表示形式。
+所以它们在缓存之外确实有其含义和用途 - 某种意义上你可以把当前目录缓存看作是
+一次 "进行中的工作"向 tree 提交）。

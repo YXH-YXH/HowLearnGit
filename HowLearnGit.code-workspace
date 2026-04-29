@@ -1,0 +1,14 @@
+{
+    "folders": [
+        {
+            "path": "."
+        },
+        {
+            "path": ".\\thirdpart\\git-official"
+        }
+    ],
+    "settings": {
+        "files.trimTrailingWhitespace": true,
+        "terminal.integrated.sendKeybindingsToShell": true, // VSCode 内置终端放行快捷键（避免终端快捷键和vscode快捷键冲突）
+    }
+}
