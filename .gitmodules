@@ -1,0 +1,3 @@
+[submodule "thirdpart/git-official"]
+	path = thirdpart/git-official
+	url = https://github.com/git/git.git
